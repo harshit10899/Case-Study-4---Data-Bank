@@ -1,0 +1,108 @@
+----------------------C. Data Allocation Challenge-----------------------
+
+SELECT * FROM CUSTOMER_TRANSACTION;
+
+CREATE OR REPLACE TABLE RUNNING_BALANCE AS
+SELECT
+    CUSTOMER_ID,
+    TXN_DATE,
+    TXN_TYPE,
+    TXN_AMOUNT,
+    SUM(CASE WHEN TXN_TYPE = 'deposit' THEN TXN_AMOUNT
+             WHEN TXN_TYPE IN ('purchase', 'withdrawal') THEN -TXN_AMOUNT
+             ELSE 0 END) OVER (PARTITION BY CUSTOMER_ID ORDER BY TXN_DATE) AS RUNNING_BALANCE
+FROM
+    CUSTOMER_TRANSACTION
+ORDER BY
+    CUSTOMER_ID, TXN_DATE;
+    
+SELECT * FROM RUNNING_BALANCE;
+
+CREATE OR REPLACE TABLE CLOSING_BALANCE AS
+SELECT CUSTOMER_ID,SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) = 1 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) = 1 THEN -TXN_AMOUNT                      
+                         END) AS "JAN_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 3 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 3 THEN -TXN_AMOUNT                      
+                         END) AS "FEB_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 4 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 4 THEN -TXN_AMOUNT                      
+                         END) AS "MAR_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 5 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 5 THEN -TXN_AMOUNT                      
+                         END) AS "APR_CLOSING_AMOUNT"
+       FROM CUSTOMER_TRANSACTION 
+       GROUP BY 1;
+SELECT * FROM CLOSING_BALANCE;
+
+SELECT CUSTOMER_ID,MAX(RUNNING_BALANCE) AS "MAXIMUM_BALANCE",MIN(RUNNING_BALANCE) AS "MINIMUM_BALANCE",
+ROUND(AVG(RUNNING_BALANCE),2) AS "AVERAGE_BALANCE" FROM RUNNING_BALANCE
+GROUP BY 1;
+
+
+
+----Option 1: data is allocated based off the amount of money at the end of the previous month
+
+SELECT * FROM CLOSING_BALANCE;
+
+WITH CTE1 AS 
+(SELECT CUSTOMER_ID,SUM(CASE 
+          WHEN JAN_CLOSING_AMOUNT > 0 THEN JAN_CLOSING_AMOUNT
+          ELSE 0
+          END) AS "JAN_DATA_ALLOCATION",SUM(CASE 
+          WHEN FEB_CLOSING_AMOUNT > 0 THEN FEB_CLOSING_AMOUNT
+          ELSE 0
+          END) AS "FEB_DATA_ALLOCATION",SUM(CASE 
+          WHEN MAR_CLOSING_AMOUNT > 0 THEN MAR_CLOSING_AMOUNT
+          ELSE 0
+          END) AS "MAR_DATA_ALLOCATION",SUM(CASE 
+          WHEN APR_CLOSING_AMOUNT > 0 THEN APR_CLOSING_AMOUNT
+          ELSE 0
+          END) AS "APR_DATA_ALLOCATION" FROM CLOSING_BALANCE
+          GROUP BY 1)
+SELECT (SUM(JAN_DATA_ALLOCATION) + SUM(FEB_DATA_ALLOCATION) + SUM(MAR_DATA_ALLOCATION) + SUM(APR_DATA_ALLOCATION))   AS "DATA_REQUIRED" FROM  CTE1;     
+          
+          
+----------------------Option 2: data is allocated on the average amount of money kept in the account in the previous 30 days---------------          
+
+
+WITH CTE1 AS(
+SELECT
+    CUSTOMER_ID,
+    TXN_DATE,
+    TXN_TYPE,
+    TXN_AMOUNT,
+    AVG(CASE WHEN TXN_TYPE = 'deposit' THEN TXN_AMOUNT
+             WHEN TXN_TYPE IN ('purchase', 'withdrawal') THEN -TXN_AMOUNT
+             ELSE 0 END) OVER (PARTITION BY CUSTOMER_ID ORDER BY TXN_DATE ROWS BETWEEN 30 PRECEDING AND 1 PRECEDING) AS "AVERAGE_BALANCE"
+FROM
+    CUSTOMER_TRANSACTION
+ORDER BY
+    CUSTOMER_ID, TXN_DATE)
+SELECT ROUND(SUM(AVERAGE_BALANCE)) AS "DATA_REQUIRED" FROM CTE1
+WHERE AVERAGE_BALANCE IS NOT NULL;
+
+
+
+-- OPTION 1 DATA REQUIRED 1022931UNITS
+-- OPTION 2 DATA REQUIRED 306145UNITS
+
+--Data Bank wants to try another option which is a bit more difficult to implement - 
+--they want to calculate data growth using an interest calculation, just like in a traditional savings account you might have with a bank.
+--If the annual interest rate is set at 6% and the Data Bank team wants to reward its customers 
+--by increasing their data allocation based off the interest calculated on a daily basis at the end
+--of each day, how much data would be required for this option on a monthly basis?
+
+WITH CTE1 AS (
+    SELECT
+        1000 AS INITIALDATAALLOCATION, -- Initial data allocation in units (e.g., GB)
+        POW(1 + 0.06, 1/12) - 1 AS MONTHLYINTERESTRATE -- Monthly interest rate
+),
+DAYS_IN_MONTH AS (
+    SELECT DAY(LAST_DAY(CURRENT_DATE())) AS NUMBEROFDAYSINMONTH -- Number of days in the month
+)
+SELECT
+    ROUND(INITIALDATAALLOCATION * POW(1 + MONTHLYINTERESTRATE, NUMBEROFDAYSINMONTH)) AS "DATAGROWTH"
+FROM
+    CTE1, DAYS_IN_MONTH;
