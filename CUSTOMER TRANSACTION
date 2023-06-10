@@ -1,0 +1,99 @@
+--------------------B. Customer Transactions------------------------------------------------
+
+
+SELECT * FROM CUSTOMER_TRANSACTION;
+
+
+------------What is the unique count and total amount for each transaction type?-----
+
+SELECT TXN_TYPE,COUNT(CUSTOMER_ID) AS "UNIQUE_COUNT",SUM(TXN_AMOUNT) AS "TOTAL_AMOUNT" 
+FROM CUSTOMER_TRANSACTION
+GROUP BY 1;
+
+-- DEPOSIT 2671 1359168
+-- WITHDRAWAL 1580 793003
+-- PURCHASE 1617 806537
+
+
+--------What is the average total historical deposit counts and amounts for all customers?------
+
+WITH CTE1 AS(
+SELECT CUSTOMER_ID,COUNT(TXN_TYPE) AS "DEPOSIT_COUNT",SUM(TXN_AMOUNT) AS "AMOUNT" FROM CUSTOMER_TRANSACTION
+WHERE TXN_TYPE = 'deposit'
+ GROUP BY 1)
+ SELECT ROUND(AVG(DEPOSIT_COUNT)) AS "AVERAGE DEPOSITS PER CUSTOMER",ROUND(AVG(AMOUNT)) AS "AVERAGE DEPOSIT AMOUNT PER CUSTOMER" FROM CTE1; 
+
+---AVERAGE DEPOSITS PER CUSTOMER ARE 5
+---AVERAGE DEPOSIR AMOUNT PER CUSTOMER IS 2718
+
+
+----------For each month - how many Data Bank customers make more than 1 deposit and either 1 purchase or 1 withdrawal in a single month?----
+                    
+                      
+SELECT
+    EXTRACT(MONTH FROM TXN_DATE) AS "TRANSACTION_MONTH",
+    COUNT(DISTINCT CUSTOMER_ID) AS "CUSTOMER_COUNT"
+FROM
+    CUSTOMER_TRANSACTION
+WHERE
+    TXN_TYPE IN ('deposit', 'prchase', 'withdrawal')
+GROUP BY
+    EXTRACT(MONTH FROM TXN_DATE)
+HAVING
+    COUNT(DISTINCT CASE WHEN TXN_TYPE = 'deposit' THEN CUSTOMER_ID END) > 1
+    AND COUNT(DISTINCT CASE WHEN TXN_TYPE IN ('purchase', 'withdrawal') THEN CUSTOMER_ID END) > 0;
+
+                     
+                      
+
+
+    
+    
+    ---------------------What is the closing balance for each customer at the end of the month?--------------
+    
+ 
+
+CREATE OR REPLACE TABLE CLOSING_BALANCE AS
+SELECT CUSTOMER_ID,SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) = 1 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) = 1 THEN -TXN_AMOUNT                      
+                         END) AS "JAN_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 3 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 3 THEN -TXN_AMOUNT                      
+                         END) AS "FEB_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 4 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 4 THEN -TXN_AMOUNT                      
+                         END) AS "MAR_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 5 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 5 THEN -TXN_AMOUNT                      
+                         END) AS "APR_CLOSING_AMOUNT"
+       FROM CUSTOMER_TRANSACTION 
+       GROUP BY 1;
+
+SELECT * FROM CLOSING_BALANCE;
+
+-----------------------------What is the percentage of customers who increase their closing balance by more than 5%?------------
+
+WITH CTE1 AS(
+SELECT CUSTOMER_ID,SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) = 1 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) = 1 THEN -TXN_AMOUNT                      
+                         END) AS "JAN_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 3 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 3 THEN -TXN_AMOUNT                      
+                         END) AS "FEB_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 4 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 4 THEN -TXN_AMOUNT                      
+                         END) AS "MAR_CLOSING_AMOUNT",SUM(CASE 
+                        WHEN TXN_TYPE = 'deposit' AND MONTH(TXN_DATE) < 5 THEN TXN_AMOUNT
+                         WHEN TXN_TYPE IN ('withdrawal','purchase') AND MONTH(TXN_DATE) < 5 THEN -TXN_AMOUNT                      
+                         END) AS "APR_CLOSING_AMOUNT"
+       FROM CUSTOMER_TRANSACTION 
+       GROUP BY 1
+  HAVING APR_CLOSING_AMOUNT > JAN_CLOSING_AMOUNT)
+  SELECT CUSTOMER_ID,ROUND((((APR_CLOSING_AMOUNT - JAN_CLOSING_AMOUNT)/APR_CLOSING_AMOUNT) * 100),2) AS "PRCNT_INCR" FROM CTE1
+  HAVING PRCNT_INCR >= 5
+  ORDER BY 2 DESC;
+
+
+----151 CUSTOMERS CLOSING BALANCE INCREASED BY MORE THEN 5 % FROM JANUARY TO APRIL END-----
