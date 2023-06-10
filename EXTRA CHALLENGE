@@ -1,0 +1,37 @@
+--Data Bank wants to try another option which is a bit more difficult to implement - 
+--they want to calculate data growth using an interest calculation, just like in a traditional savings account you might have with a bank.
+--If the annual interest rate is set at 6% and the Data Bank team wants to reward its customers 
+--by increasing their data allocation based off the interest calculated on a daily basis at the end
+--of each day, how much data would be required for this option on a monthly basis?
+
+WITH CTE1 AS (
+    SELECT
+        1000 AS INITIALDATAALLOCATION, -- Initial data allocation in units (e.g., GB)
+        POW(1 + 0.06, 1/12) - 1 AS MONTHLYINTERESTRATE -- Monthly interest rate
+),
+DAYS_IN_MONTH AS (
+    SELECT DAY(LAST_DAY(CURRENT_DATE())) AS NUMBEROFDAYSINMONTH -- Number of days in the month
+)
+SELECT
+    ROUND(INITIALDATAALLOCATION * POW(1 + MONTHLYINTERESTRATE, NUMBEROFDAYSINMONTH)) AS "DATAGROWTH"
+FROM
+    CTE1, DAYS_IN_MONTH;
+    
+    
+    
+    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+WITH CTE1 AS (
+    SELECT
+        1000 AS INITIALDATAALLOCATION, 
+        POW(1 + 0.06, 1/365) - 1 AS DAILYINTERESTRATE
+DAYS_IN_MONTH AS (
+    SELECT DAY(LAST_DAY(CURRENT_DATE())) AS NUMBERODDAYSINMONTH -- Number of days in the month
+)
+SELECT
+    ROUND(INITIALDATAALLOCATION * POW(1 + DAILYINTERESTRATE, NUMBERODDAYSINMONTH)) AS "DATAGROWTH"
+FROM
+    CTE1, DAYS_IN_MONTH;
